@@ -1,7 +1,9 @@
 /**
  * Builds and publishes the npm packages from a finished goreleaser run: one package per platform
- * (@customdomain/cli-<os>-<arch>, holding the binary) and then the main `customdomain` package, which
- * lists them as optional dependencies. Usage: node npm/publish.mjs <version> [--dry-run]
+ * (@customdomain/cli-<os>-<arch>, holding the binary) and then the main @customdomain/cli package, which
+ * lists them as optional dependencies. npm refuses the bare name `customdomain` (too close to another
+ * package), so the main package is scoped; the command it installs is still `customdomain`. A version
+ * already on npm is skipped, so a rerun after a partial publish is safe. Usage: node npm/publish.mjs <version> [--dry-run]
  */
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, chmodSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -28,7 +30,21 @@ if (binaries.length === 0) throw new Error("no binaries in dist/artifacts.json; 
 rmSync(out, { recursive: true, force: true });
 const optionalDependencies = {};
 
+function published(name) {
+  try {
+    execFileSync("npm", ["view", `${name}@${version}`, "version"], { stdio: ["ignore", "pipe", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function publish(dir) {
+  const name = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name;
+  if (!dryRun && published(name)) {
+    console.log(`${name}@${version} is already on npm; skipping`);
+    return;
+  }
   const args = ["publish", dir, "--access", "public"];
   if (process.env.GITHUB_ACTIONS) args.push("--provenance");
   if (dryRun) args.push("--dry-run");
@@ -49,12 +65,12 @@ for (const b of binaries) {
     join(dir, "package.json"),
     JSON.stringify({ name, ...common, description: `The customdomain command for ${os} ${cpu}.`, os: [os], cpu: [cpu], preferUnplugged: true }, null, 2) + "\n",
   );
-  writeFileSync(join(dir, "README.md"), `The \`customdomain\` binary for ${os} ${cpu}. Install \`customdomain\` instead.\n`);
+  writeFileSync(join(dir, "README.md"), `The \`customdomain\` binary for ${os} ${cpu}. Install \`@customdomain/cli\` instead.\n`);
   optionalDependencies[name] = version;
   publish(dir);
 }
 
-const main = join(out, "customdomain");
+const main = join(out, "cli");
 mkdirSync(join(main, "bin"), { recursive: true });
 copyFileSync(join(root, "npm", "bin", "customdomain.js"), join(main, "bin", "customdomain.js"));
 chmodSync(join(main, "bin", "customdomain.js"), 0o755);
@@ -64,7 +80,7 @@ writeFileSync(
   join(main, "package.json"),
   JSON.stringify(
     {
-      name: "customdomain",
+      name: "@customdomain/cli",
       ...common,
       description: "Connect custom domains to your app from the terminal: sign in, create an API key, check a domain.",
       keywords: ["custom domain", "dns", "ssl", "cli", "customdomain"],

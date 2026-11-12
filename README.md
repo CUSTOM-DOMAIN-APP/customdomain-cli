@@ -6,14 +6,14 @@ API key, and check what stands between a domain and your app.
 ## Install
 
 ```bash
-npm install -g customdomain
+npm install -g @customdomain/cli
 ```
 
 ```bash
 brew install custom-domain-app/tap/customdomain
 ```
 
-Or run it once without installing: `npx customdomain init`. Binaries for macOS, Linux and Windows are also on the
+Or run it once without installing: `npx @customdomain/cli init`. Binaries for macOS, Linux and Windows are also on the
 [releases page](https://github.com/CUSTOM-DOMAIN-APP/customdomain-cli/releases).
 
 ## Use
