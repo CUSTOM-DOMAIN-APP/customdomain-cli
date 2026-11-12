@@ -1,0 +1,51 @@
+# .goreleaser.yaml builds the customdomain binaries for each release tag, attaches them to the GitHub release
+# and updates the Homebrew formula in CUSTOM-DOMAIN-APP/homebrew-tap. npm/publish.mjs then publishes the same
+# binaries to npm. The version comes from the tag.
+version: 2
+project_name: customdomain
+
+builds:
+  - id: customdomain
+    main: ./cmd/customdomain
+    binary: customdomain
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X github.com/CUSTOM-DOMAIN-APP/customdomain-cli/internal/cli.Version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [LICENSE, README.md]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+brews:
+  - name: customdomain
+    repository:
+      owner: CUSTOM-DOMAIN-APP
+      name: homebrew-tap
+      git:
+        url: git@github.com:CUSTOM-DOMAIN-APP/homebrew-tap.git
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
+    directory: Formula
+    homepage: https://customdomain.ai
+    description: Connect custom domains to your app from the terminal
+    license: Apache-2.0
+    commit_author:
+      name: github-actions[bot]
+      email: 41898282+github-actions[bot]@users.noreply.github.com
+    commit_msg_template: "customdomain {{ .Tag }}"
+    install: |
+      bin.install "customdomain"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/customdomain version")
