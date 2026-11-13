@@ -83,6 +83,9 @@ func (a *App) init(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not list your applications: %w", err)
 	}
 	app, err := pickApp(list.Applications, appID)
+	if errors.Is(err, errSeveralApps) && a.In != nil {
+		app, err = a.askApp(list.Applications)
+	}
 	if err != nil {
 		return err
 	}
@@ -169,6 +172,34 @@ func mergeScopes(a, b string) string {
 	return strings.Join(out, " ")
 }
 
+// errSeveralApps is pickApp's answer when the choice is the person's; in a terminal init asks, elsewhere it says --app.
+var errSeveralApps = errors.New("this workspace has several applications")
+
+// askApp lists the applications and reads the person's choice by number from a.In.
+func (a *App) askApp(apps []initApp) (initApp, error) {
+	fmt.Fprintln(a.Out, "This workspace has several applications. Which one is this project?")
+	for i, ap := range apps {
+		mode := ""
+		if ap.Sandbox {
+			mode = " (test mode)"
+		}
+		fmt.Fprintf(a.Out, "  %d. %s%s  %s\n", i+1, ap.Name, mode, ap.ID)
+	}
+	r := bufio.NewReader(a.In)
+	for tries := 0; tries < 3; tries++ {
+		fmt.Fprintf(a.Out, "Number (1 to %d): ", len(apps))
+		line, err := r.ReadString('\n')
+		var n int
+		if _, scanErr := fmt.Sscanf(strings.TrimSpace(line), "%d", &n); scanErr == nil && n >= 1 && n <= len(apps) {
+			return apps[n-1], nil
+		}
+		if err != nil {
+			break
+		}
+	}
+	return initApp{}, errors.New("no application chosen; run init again, or pass --app")
+}
+
 // pickApp is the application `--app` names, or the only one, or the only test mode one.
 func pickApp(apps []initApp, id string) (initApp, error) {
 	if id != "" {
@@ -195,7 +226,7 @@ func pickApp(apps []initApp, id string) (initApp, error) {
 		return sandboxes[0], nil
 	}
 	var b strings.Builder
-	b.WriteString("this workspace has several applications; pick one with --app:")
+	b.WriteString(errSeveralApps.Error() + "; pick one with --app:")
 	for _, a := range apps {
 		mode := ""
 		if a.Sandbox {
@@ -203,8 +234,14 @@ func pickApp(apps []initApp, id string) (initApp, error) {
 		}
 		fmt.Fprintf(&b, "\n  %s  %s%s", a.ID, a.Name, mode)
 	}
-	return initApp{}, errors.New(b.String())
+	return initApp{}, severalAppsError(b.String())
 }
+
+// severalAppsError keeps the --app list as the message while errors.Is still finds errSeveralApps.
+type severalAppsError string
+
+func (e severalAppsError) Error() string   { return string(e) }
+func (e severalAppsError) Is(t error) bool { return t == errSeveralApps }
 
 // readEnvFile reads KEY=value lines; a missing file is empty.
 func readEnvFile(path string) (map[string]string, error) {

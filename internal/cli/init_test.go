@@ -76,6 +76,28 @@ func TestInitAsksWhichApplicationWhenItCannotTell(t *testing.T) {
 	}
 }
 
+func TestInitInATerminalAsksForTheApplicationByNumber(t *testing.T) {
+	r, dir := initRig(t, liveApp, map[string]any{"id": "app_test", "name": "Acme test", "sandbox": false})
+	r.app.In = strings.NewReader("9\n2\n")
+	env := filepath.Join(dir, ".env.local")
+	if code := r.app.Run(context.Background(), []string{"init", "--env-file", env}); code != 0 {
+		t.Fatalf("init = %d: %s", code, r.out)
+	}
+	b, _ := os.ReadFile(env)
+	if !strings.Contains(string(b), "CUSTOMDOMAIN_APPLICATION_ID=app_test") {
+		t.Fatalf("env file = %q, out = %s", b, r.out)
+	}
+}
+
+func TestInitInATerminalGivesUpWithoutAChoice(t *testing.T) {
+	r, dir := initRig(t, liveApp, map[string]any{"id": "app_other", "name": "Other", "sandbox": false})
+	r.app.In = strings.NewReader("")
+	code := r.app.Run(context.Background(), []string{"init", "--env-file", filepath.Join(dir, ".env")})
+	if code == 0 || !strings.Contains(r.out.String(), "--app") || len(r.api.keyBodies) != 0 {
+		t.Fatalf("init = %d: %s", code, r.out)
+	}
+}
+
 func TestInitKeepsAGitignoreThatAlreadyCoversTheFile(t *testing.T) {
 	r, dir := initRig(t, testApp)
 	_ = os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("node_modules\n.env*.local\n"), 0o644)

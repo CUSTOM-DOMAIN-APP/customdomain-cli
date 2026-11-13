@@ -52,8 +52,10 @@ type App struct {
 	HTTP     *http.Client
 	Out      io.Writer
 	Err      io.Writer
-	Now      func() time.Time
-	Sleep    func(context.Context, time.Duration) error
+	// In is the person's keyboard when the CLI runs in a terminal; nil (tests, pipes, agents) never prompts.
+	In    io.Reader
+	Now   func() time.Time
+	Sleep func(context.Context, time.Duration) error
 	// OpenURL opens the approval page in the person's browser; nil (tests, CUSTOMDOMAIN_NO_BROWSER) only prints it.
 	OpenURL func(string) error
 }
@@ -80,9 +82,13 @@ func FromEnv() *App {
 	if os.Getenv("CUSTOMDOMAIN_NO_BROWSER") == "" {
 		opener = openBrowser
 	}
+	var in io.Reader
+	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		in = os.Stdin
+	}
 	return &App{
-		OpenURL: opener,
-		API:     api, APIKey: strings.TrimSpace(os.Getenv("CUSTOMDOMAIN_API_KEY")),
+		OpenURL: opener, In: in,
+		API: api, APIKey: strings.TrimSpace(os.Getenv("CUSTOMDOMAIN_API_KEY")),
 		CredPath: filepath.Join(dir, "customdomain", "credentials.json"),
 		HTTP:     &http.Client{Timeout: 30 * time.Second}, Out: os.Stdout, Err: os.Stderr,
 		Now: time.Now, Sleep: sleepCtx,
